@@ -27,6 +27,72 @@ MongoDB **6.0 or newer** is required (the grader uses 7.0). MongoDB Atlas free t
 opt-in and a dedicated disposable development database; it always rejects
 `attendance_db`. Do not run it against shared, production, or grader data.
 
+## Architecture
+
+```mermaid
+flowchart TD
+    Client[HTTP Client] --> API[FastAPI Application]
+    API --> Validation[ Pydantic Validation<br/>Shared Business Rules ]
+    Validation --> Operations[Employee and Attendance Routes]
+    Operations --> Punch[Attendance Operations<br/>Punch-in · Punch-out · Regularization]
+    Operations --> DB[(MongoDB)]
+    Punch --> DB
+    API --> Analytics[Analytics Routes]
+    Analytics --> Pipelines[MongoDB Aggregation Pipelines]
+    Pipelines --> DB
+    Analytics --> Monthly[Employee Monthly]
+    Analytics --> Summary[Department Summary]
+    Analytics --> Leaderboard[Late-arrival Leaderboard]
+    Analytics --> Trend[Department Trend]
+    API --> Explain[Admin Query Explain]
+    Explain --> DB
+    DB --> Employees[employees Collection]
+    DB --> Attendance[attendance_logs Collection]
+    Tests[Unit and Integration Tests] -.-> API
+    Integration[Integration Tests<br/>Isolated attendance_test database] -.-> DB
+    Tests -.-> Validation
+```
+
+### API layer
+
+FastAPI route handlers expose employee, attendance, analytics, health, and
+admin explain endpoints. Pydantic request models and shared validators enforce
+the documented employee, timestamp, date, month, and status formats before
+route logic runs.
+
+### Data layer
+
+PyMongo connects to the database selected by `MONGO_URI` and `MONGO_DB`.
+`employees` stores employee identity, department, shifts, and join dates;
+`attendance_logs` stores one record per employee and attendance date, including
+stored derived attendance values and regularization history. Startup creates
+unique employee and attendance natural-key indexes plus indexes supporting
+department, date, and employee-month queries.
+
+### Business logic
+
+Punch-in calculates the IST attendance day and late minutes. Punch-out uses a
+conditional update so only one concurrent request can close a record.
+Regularization recomputes derived fields, appends an audit entry, and uses an
+optimistic history-length check so concurrent corrections cannot overwrite one
+another. Datetimes are normalized at the MongoDB boundary and returned as
+epoch milliseconds.
+
+### Analytics and diagnostics
+
+Monthly employee analytics, department summaries, the late-arrival leaderboard,
+and department trends run through MongoDB aggregation pipelines. The trend
+pipeline performs database-side date densification and moving averages. The
+admin explain endpoint builds the same endpoint-specific find or aggregation
+commands and requests MongoDB `executionStats` for diagnostics.
+
+### Testing
+
+Unit tests exercise validators and calculation helpers. Integration tests use
+FastAPI's test client against a fresh uniquely named `attendance_test_<uuid>`
+MongoDB database, with concurrency and endpoint behavior covered separately
+from the production or development `attendance_db` database.
+
 ## Testing
 Install the runtime and test-client dependencies, then run the unit and integration suites:
 
