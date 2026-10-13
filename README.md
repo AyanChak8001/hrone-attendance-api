@@ -15,11 +15,17 @@ much larger and contains cases they do not show.
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env            # set MONGO_URI / MONGO_DB (local docker: docker run -p 27017:27017 mongo:7)
+cp .env.example .env            # set MONGO_URI and a disposable MONGO_DB (local docker: docker run -p 27017:27017 mongo:7)
+# Set ALLOW_DESTRUCTIVE_SEED=true in .env, then run the replacement seed:
 python sample_seed.py
 uvicorn app.main:app --port 8000 --reload
 ```
 MongoDB **6.0 or newer** is required (the grader uses 7.0). MongoDB Atlas free tier (M0) works.
+
+`sample_seed.py` replaces the contents of both `employees` and
+`attendance_logs`. It requires the explicit `ALLOW_DESTRUCTIVE_SEED=true`
+opt-in and a dedicated disposable development database; it always rejects
+`attendance_db`. Do not run it against shared, production, or grader data.
 
 ## Testing
 Install the runtime and test-client dependencies, then run the unit and integration suites:

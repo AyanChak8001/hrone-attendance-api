@@ -1,9 +1,8 @@
-"""Loads the nine sample documents from sample_data/ (see DATA_MODEL.md) into your database.
-Usage:  python sample_seed.py            (reads MONGO_URI / MONGO_DB from the environment or .env)
+"""Replace both collections with the nine sample documents.
 
-Equivalent with the MongoDB tools:
-  mongoimport --uri "$MONGO_URI" --db "$MONGO_DB" -c employees       --jsonArray --drop --file sample_data/employees.json
-  mongoimport --uri "$MONGO_URI" --db "$MONGO_DB" -c attendance_logs --jsonArray --drop --file sample_data/attendance_logs.json
+The target must be a dedicated disposable development database. Set
+``ALLOW_DESTRUCTIVE_SEED=true`` explicitly before running this script; the
+protected ``attendance_db`` name is always rejected.
 
 The samples show document SHAPES only. The grader uses a much larger hidden dataset with cases they do not show.
 Passing on this sample does not mean your analytics are correct - re-read the business rules."""
@@ -24,14 +23,34 @@ def required_mongo_setting(name):
     return value
 
 
-mongo_uri = required_mongo_setting("MONGO_URI")
-mongo_db = required_mongo_setting("MONGO_DB")
-here = pathlib.Path(__file__).parent / "sample_data"
-opts = json_util.JSONOptions(tz_aware=True)
-db = MongoClient(mongo_uri, tz_aware=True)[mongo_db]
+def validate_seed_configuration(mongo_db: str) -> None:
+    """Reject unsafe targets before creating a client or touching collections."""
+    if mongo_db == "attendance_db":
+        raise RuntimeError(
+            "Refusing to seed attendance_db. Set MONGO_DB to a dedicated disposable development database."
+        )
+    if os.getenv("ALLOW_DESTRUCTIVE_SEED", "").strip().lower() != "true":
+        raise RuntimeError(
+            "Seeding replaces both collections. Set ALLOW_DESTRUCTIVE_SEED=true only for a disposable development database."
+        )
 
-for name in ("employees", "attendance_logs"):
-    docs = json_util.loads((here / f"{name}.json").read_text(), json_options=opts)
-    db[name].delete_many({})
-    db[name].insert_many(docs)
-    print(f"loaded {len(docs):>2} documents into '{db.name}.{name}'")
+
+def seed() -> None:
+    """Validate configuration, then replace the sample collections."""
+    mongo_uri = required_mongo_setting("MONGO_URI")
+    mongo_db = required_mongo_setting("MONGO_DB")
+    validate_seed_configuration(mongo_db)
+
+    here = pathlib.Path(__file__).parent / "sample_data"
+    opts = json_util.JSONOptions(tz_aware=True)
+    db = MongoClient(mongo_uri, tz_aware=True)[mongo_db]
+
+    for name in ("employees", "attendance_logs"):
+        docs = json_util.loads((here / f"{name}.json").read_text(), json_options=opts)
+        db[name].delete_many({})
+        db[name].insert_many(docs)
+        print(f"loaded {len(docs):>2} documents into '{db.name}.{name}'")
+
+
+if __name__ == "__main__":
+    seed()
