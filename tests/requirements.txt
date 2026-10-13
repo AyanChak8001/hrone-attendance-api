@@ -1,0 +1,2 @@
+# HTTP client required by Starlette 1.7.0's FastAPI TestClient.
+httpx2>=2.0.0
